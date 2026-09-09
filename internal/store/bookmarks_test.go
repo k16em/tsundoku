@@ -496,3 +496,84 @@ func TestAllLoadsTagsBeyondSQLiteVariableLimit(t *testing.T) {
 		t.Fatal("unexpected bookmarks or tags")
 	}
 }
+
+func TestRandomReturnsOnlyUnreadBookmarksUpToLimit(t *testing.T) {
+	s := newTestStore(t)
+	ids := addFixtures(t, s)
+
+	got, err := s.Random(10)
+	if err != nil {
+		t.Fatalf("Random() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("Random(10) returned %d bookmarks, want 2", len(got))
+	}
+	for _, b := range got {
+		if b.ID == ids["b"] {
+			t.Fatalf("Random() returned the read bookmark %d", ids["b"])
+		}
+		if b.Read {
+			t.Fatalf("Random() returned bookmark %d with Read = true", b.ID)
+		}
+	}
+
+	one, err := s.Random(1)
+	if err != nil {
+		t.Fatalf("Random() error = %v", err)
+	}
+	if len(one) != 1 {
+		t.Fatalf("Random(1) returned %d bookmarks, want 1", len(one))
+	}
+}
+
+func TestRandomAttachesTags(t *testing.T) {
+	s := newTestStore(t)
+	ids := addFixtures(t, s)
+
+	if err := s.MarkRead(ids["c"]); err != nil {
+		t.Fatalf("MarkRead() error = %v", err)
+	}
+
+	got, err := s.Random(10)
+	if err != nil {
+		t.Fatalf("Random() error = %v", err)
+	}
+	if len(got) != 1 || got[0].ID != ids["a"] {
+		t.Fatalf("Random() = %+v, want only %d", got, ids["a"])
+	}
+	if !reflect.DeepEqual(got[0].Tags, []string{"blog", "golang"}) {
+		t.Fatalf("Tags = %v, want [blog golang]", got[0].Tags)
+	}
+}
+
+func TestRandomEventuallyReturnsEveryUnreadBookmark(t *testing.T) {
+	s := newTestStore(t)
+	ids := addFixtures(t, s)
+
+	seen := map[int64]bool{}
+	for i := 0; i < 200; i++ {
+		got, err := s.Random(1)
+		if err != nil {
+			t.Fatalf("Random() error = %v", err)
+		}
+		if len(got) != 1 {
+			t.Fatalf("Random(1) returned %d bookmarks, want 1", len(got))
+		}
+		seen[got[0].ID] = true
+	}
+	if !seen[ids["a"]] || !seen[ids["c"]] {
+		t.Fatalf("Random(1) drew %v over 200 tries, want both %d and %d", seen, ids["a"], ids["c"])
+	}
+}
+
+func TestRandomReturnsAnErrorForANonPositiveLimit(t *testing.T) {
+	s := newTestStore(t)
+	addFixtures(t, s)
+
+	if _, err := s.Random(0); err == nil {
+		t.Fatalf("Random(0) error = nil, want error")
+	}
+	if _, err := s.Random(-1); err == nil {
+		t.Fatalf("Random(-1) error = nil, want error")
+	}
+}

@@ -44,6 +44,10 @@ type Parsed struct {
 	ShowFrozen bool
 	ShowJSON   bool
 
+	RandomCount  int
+	RandomFrozen bool
+	RandomJSON   bool
+
 	RemoveIDs []int64
 
 	TagSort    string
@@ -70,6 +74,8 @@ func (s *stringList) Set(v string) error {
 }
 
 const defaultShowUnreadLimit = 10
+
+const defaultRandomCount = 1
 
 type globalFlags struct {
 	db      string
@@ -157,6 +163,8 @@ func Parse(args []string) (*Parsed, error) {
 		return parseList(rest)
 	case "show":
 		return parseShow(rest)
+	case "random":
+		return parseRandom(rest)
 	case "rm":
 		return parseRemove(rest)
 	case "tag":
@@ -364,6 +372,54 @@ func parseShow(rest []string) (*Parsed, error) {
 	return p, nil
 }
 
+func parseRandom(rest []string) (*Parsed, error) {
+	fs := newFlagSet("random")
+	g := registerGlobalFlags(fs)
+	frozen := fs.Bool("frozen", false, "do not mark the drawn bookmarks as read")
+	var jsonOut bool
+	fs.BoolVar(&jsonOut, "json", false, "output as JSON")
+	fs.BoolVar(&jsonOut, "j", false, "output as JSON")
+
+	help := commandHelp(fs, "tsundoku random [N] [OPTIONS]")
+	fs.Usage = func() { fmt.Fprint(fs.Output(), help) }
+
+	if err := fs.Parse(Permute(fs, rest)); err != nil {
+		return helpErr(help, fmt.Errorf("cli: %w", err))
+	}
+
+	p := &Parsed{Command: "random"}
+	applyGlobal(p, g)
+	if p.Help {
+		p.HelpText = help
+		return p, nil
+	}
+	if p.Version {
+		return p, nil
+	}
+
+	operands := fs.Args()
+	if len(operands) > 1 {
+		return helpErr(help, fmt.Errorf("cli: random takes at most one count, got %d", len(operands)))
+	}
+
+	count := defaultRandomCount
+	if len(operands) == 1 {
+		n, err := strconv.Atoi(operands[0])
+		if err != nil {
+			return helpErr(help, fmt.Errorf("cli: invalid count %q: %w", operands[0], err))
+		}
+		if n < 1 {
+			return helpErr(help, fmt.Errorf("cli: random count must be at least 1, got %d", n))
+		}
+		count = n
+	}
+
+	p.RandomCount = count
+	p.RandomFrozen = *frozen
+	p.RandomJSON = jsonOut
+	return p, nil
+}
+
 func parseRemove(rest []string) (*Parsed, error) {
 	fs := newFlagSet("rm")
 	g := registerGlobalFlags(fs)
@@ -504,6 +560,7 @@ Commands:
   list                  list bookmarks
   show <ID>             show one bookmark and mark it read
   show unread           show unread bookmarks in order and mark them read
+  random [N]            show N random unread bookmarks and mark them read
   rm <ID>...            remove one or more bookmarks
   tag list              list tags with counts
   tag refresh           reapply filters to existing bookmarks

@@ -95,6 +95,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runList(st, cfg, parsed, stdout, stderr)
 	case "show":
 		return runShow(st, parsed, stdout, stderr, notify)
+	case "random":
+		return runRandom(st, parsed, stdout, stderr, notify)
 	case "rm":
 		return runRemove(st, parsed, stdout, stderr, notify)
 	case "tag list":
@@ -291,23 +293,35 @@ func runShowUnread(st *store.Store, parsed *cli.Parsed, stdout, stderr io.Writer
 	if err != nil {
 		return reportErr(stderr, err)
 	}
+	return emitUnread(st, bs, parsed.ShowFrozen, parsed.ShowJSON, stdout, stderr, notify)
+}
 
-	if len(bs) == 0 && !parsed.ShowJSON {
+func runRandom(st *store.Store, parsed *cli.Parsed, stdout, stderr io.Writer, notify func(string, ...any)) int {
+	limit := normalize.ClampLimit(parsed.RandomCount)
+	bs, err := st.Random(limit)
+	if err != nil {
+		return reportErr(stderr, err)
+	}
+	return emitUnread(st, bs, parsed.RandomFrozen, parsed.RandomJSON, stdout, stderr, notify)
+}
+
+func emitUnread(st *store.Store, bs []store.Bookmark, frozen, jsonOut bool, stdout, stderr io.Writer, notify func(string, ...any)) int {
+	if len(bs) == 0 && !jsonOut {
 		notify("note: no unread bookmarks")
 		return 0
 	}
 
-	if !parsed.ShowFrozen {
+	if !frozen {
 		for i := range bs {
 			bs[i].Read = true
 		}
 	}
 
-	if parsed.ShowJSON {
+	if jsonOut {
 		if err := output.PrintShowJSONList(stdout, bs); err != nil {
 			return reportErr(stderr, err)
 		}
-		if !parsed.ShowFrozen {
+		if !frozen {
 			for _, b := range bs {
 				if err := st.MarkRead(b.ID); err != nil {
 					return reportErr(stderr, fmt.Errorf("mark bookmark %d read: %w", b.ID, err))
@@ -326,7 +340,7 @@ func runShowUnread(st *store.Store, parsed *cli.Parsed, stdout, stderr io.Writer
 		if err := output.PrintShow(stdout, b); err != nil {
 			return reportErr(stderr, err)
 		}
-		if !parsed.ShowFrozen {
+		if !frozen {
 			if err := st.MarkRead(b.ID); err != nil {
 				return reportErr(stderr, fmt.Errorf("mark bookmark %d read: %w", b.ID, err))
 			}

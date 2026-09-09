@@ -699,3 +699,67 @@ func TestParseShowWithNoOperandIsAnError(t *testing.T) {
 		t.Fatalf("expected an error")
 	}
 }
+
+func TestParseRandomDefaultsToOneAndAcceptsACount(t *testing.T) {
+	p, err := Parse([]string{"random"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Command != "random" {
+		t.Errorf("Command = %q, want %q", p.Command, "random")
+	}
+	if p.RandomCount != 1 {
+		t.Errorf("RandomCount = %d, want 1", p.RandomCount)
+	}
+
+	p2, err := Parse([]string{"random", "5"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p2.RandomCount != 5 {
+		t.Errorf("RandomCount = %d, want 5", p2.RandomCount)
+	}
+}
+
+func TestParseRandomJSONShortAndLongFlagsAreEquivalent(t *testing.T) {
+	short, err := Parse([]string{"random", "3", "-j"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	long, err := Parse([]string{"random", "3", "--json"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !short.RandomJSON || !long.RandomJSON {
+		t.Errorf("RandomJSON = %v/%v, want true/true", short.RandomJSON, long.RandomJSON)
+	}
+}
+
+func TestParseRandomAcceptsFlagsBeforeTheCount(t *testing.T) {
+	p, err := Parse([]string{"random", "--frozen", "--json", "4"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.RandomCount != 4 || !p.RandomFrozen || !p.RandomJSON {
+		t.Errorf("got count=%d frozen=%v json=%v, want 4/true/true", p.RandomCount, p.RandomFrozen, p.RandomJSON)
+	}
+}
+
+func TestParseRandomRejectsBadCounts(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"not a number", []string{"random", "abc"}},
+		{"zero", []string{"random", "0"}},
+		{"two operands", []string{"random", "1", "2"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := Parse(tt.args); err == nil {
+				t.Fatalf("Parse(%v) expected an error", tt.args)
+			}
+		})
+	}
+}

@@ -637,6 +637,7 @@ func TestEachSubcommandHelpPrintsItsOwnTextToStdoutAndExitsZero(t *testing.T) {
 		{"add", []string{"add", "--help"}, "tsundoku add"},
 		{"list", []string{"list", "--help"}, "tsundoku list"},
 		{"show", []string{"show", "--help"}, "tsundoku show"},
+		{"random", []string{"random", "--help"}, "tsundoku random"},
 		{"rm", []string{"rm", "--help"}, "tsundoku rm"},
 		{"tag list", []string{"tag", "list", "--help"}, "tsundoku tag list"},
 		{"tag refresh", []string{"tag", "refresh", "--help"}, "tsundoku tag refresh"},
@@ -1099,5 +1100,136 @@ func TestShowUnreadLimitDefaultsToTenAndCanBeOverridden(t *testing.T) {
 	stdout, _ := mustRun(t, dbPath, cfgPath, "show", "unread", "--limit", "2")
 	if strings.Count(stdout, "URL   :") != 2 {
 		t.Errorf("stdout = %q, want exactly 2 blocks", stdout)
+	}
+}
+
+func TestRandomReturnsTheRequestedNumberOfUnreadBookmarksAndMarksThemRead(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+	for i := 0; i < 4; i++ {
+		mustRun(t, dbPath, cfgPath, "add", "https://example.com/"+strconv.Itoa(i))
+	}
+
+	stdout, _ := mustRun(t, dbPath, cfgPath, "random", "2")
+	if strings.Count(stdout, "URL   :") != 2 {
+		t.Fatalf("stdout = %q, want exactly 2 blocks", stdout)
+	}
+
+	s := openStore(t, dbPath)
+	unread, err := s.Unread(10)
+	if err != nil {
+		t.Fatalf("Unread() error = %v", err)
+	}
+	if len(unread) != 2 {
+		t.Errorf("%d bookmarks left unread, want 2", len(unread))
+	}
+}
+
+func TestRandomWithNoCountDrawsASingleBookmark(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/a")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/b")
+
+	stdout, _ := mustRun(t, dbPath, cfgPath, "random")
+	if strings.Count(stdout, "URL   :") != 1 {
+		t.Errorf("stdout = %q, want exactly 1 block", stdout)
+	}
+}
+
+func TestRandomFrozenDoesNotMarkRead(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/a")
+
+	stdout, _ := mustRun(t, dbPath, cfgPath, "random", "1", "--frozen")
+	if !strings.Contains(stdout, "Read  : no") {
+		t.Errorf("stdout = %q, want it to report Read : no", stdout)
+	}
+
+	s := openStore(t, dbPath)
+	b, err := s.Get(1)
+	if err != nil {
+		t.Fatalf("Get(1) error = %v", err)
+	}
+	if b.Read {
+		t.Errorf("bookmark 1 Read = true, want false")
+	}
+}
+
+func TestRandomJSONMarksEveryElementReadUnlessFrozen(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/a")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/b")
+
+	frozen, _ := mustRun(t, dbPath, cfgPath, "random", "2", "-j", "--frozen")
+	if strings.Count(frozen, `"read": false`) != 2 {
+		t.Errorf("random -j --frozen stdout = %q, want two read: false entries", frozen)
+	}
+
+	stdout, _ := mustRun(t, dbPath, cfgPath, "random", "2", "--json")
+	if strings.Count(stdout, `"read": true`) != 2 {
+		t.Errorf("random --json stdout = %q, want two read: true entries", stdout)
+	}
+
+	s := openStore(t, dbPath)
+	for _, id := range []int64{1, 2} {
+		b, err := s.Get(id)
+		if err != nil {
+			t.Fatalf("Get(%d) error = %v", id, err)
+		}
+		if !b.Read {
+			t.Errorf("bookmark %d Read = false, want true", id)
+		}
+	}
+}
+
+func TestRandomWithNoUnreadBookmarksNotesToStderrAndPrintsAnEmptyJSONArray(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+
+	stdout, stderr := mustRun(t, dbPath, cfgPath, "random", "3")
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "no unread bookmarks") {
+		t.Errorf("stderr = %q, want a no-unread note", stderr)
+	}
+
+	jsonOut, _ := mustRun(t, dbPath, cfgPath, "random", "3", "--json")
+	if strings.TrimSpace(jsonOut) != "[]" {
+		t.Errorf("stdout = %q, want []", jsonOut)
+	}
+}
+
+func TestRandomDrawsOnlyFromUnreadBookmarks(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/read")
+	mustRun(t, dbPath, cfgPath, "add", "https://example.com/unread")
+	mustRun(t, dbPath, cfgPath, "show", "1")
+
+	for i := 0; i < 20; i++ {
+		stdout, _ := mustRun(t, dbPath, cfgPath, "random", "1", "--frozen")
+		if strings.Contains(stdout, "example.com/read") {
+			t.Fatalf("stdout = %q, want the already-read bookmark to be excluded", stdout)
+		}
+	}
+}
+
+func TestRandomWithANonNumericCountIsRejectedByParse(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	mustRun(t, dbPath, cfgPath, "init")
+
+	stdout, stderr, code := run(dbPath, cfgPath, "random", "abc")
+	if code == 0 {
+		t.Fatalf("exit code = 0, want non-zero")
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "error:") {
+		t.Errorf("stderr = %q, want an error: prefix", stderr)
 	}
 }
