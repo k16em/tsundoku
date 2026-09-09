@@ -169,6 +169,8 @@ func Parse(args []string) (*Parsed, error) {
 		return parseRemove(rest)
 	case "tag":
 		return parseTag(rest)
+	case "skill":
+		return parseSkill(rest)
 	default:
 		return nil, fmt.Errorf("cli: unknown command %q", name)
 	}
@@ -550,6 +552,53 @@ func parseTagRefresh(rest []string) (*Parsed, error) {
 	return p, nil
 }
 
+func parseSkill(rest []string) (*Parsed, error) {
+	lookahead := newFlagSet("skill")
+	registerGlobalFlags(lookahead)
+
+	name, rest2, err := SplitCommand(lookahead, rest)
+	if err != nil {
+		return nil, fmt.Errorf("cli: %w", err)
+	}
+
+	switch name {
+	case "install":
+		return parseSkillCommand("skill install", "tsundoku skill install [OPTIONS]", rest2)
+	case "uninstall":
+		return parseSkillCommand("skill uninstall", "tsundoku skill uninstall [OPTIONS]", rest2)
+	default:
+		return nil, fmt.Errorf("cli: unknown skill subcommand %q", name)
+	}
+}
+
+func parseSkillCommand(command, usage string, rest []string) (*Parsed, error) {
+	fs := newFlagSet(command)
+	g := registerGlobalFlags(fs)
+
+	help := commandHelp(fs, usage)
+	fs.Usage = func() { fmt.Fprint(fs.Output(), help) }
+
+	if err := fs.Parse(Permute(fs, rest)); err != nil {
+		return helpErr(help, fmt.Errorf("cli: %w", err))
+	}
+
+	p := &Parsed{Command: command}
+	applyGlobal(p, g)
+	if p.Help {
+		p.HelpText = help
+		return p, nil
+	}
+	if p.Version {
+		return p, nil
+	}
+
+	if len(fs.Args()) > 0 {
+		return helpErr(help, fmt.Errorf("cli: %s takes no positional arguments", command))
+	}
+
+	return p, nil
+}
+
 // Usage returns the top-level help text.
 func Usage() string {
 	return `tsundoku <COMMAND> [OPTIONS]
@@ -564,6 +613,8 @@ Commands:
   rm <ID>...            remove one or more bookmarks
   tag list              list tags with counts
   tag refresh           reapply filters to existing bookmarks
+  skill install         install the agent skill document
+  skill uninstall       remove the installed agent skill document
 
 Global options:
   --db <PATH>           override the database path

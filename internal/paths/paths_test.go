@@ -224,3 +224,42 @@ func TestOSEnvReadsFromProcessEnvironment(t *testing.T) {
 		t.Errorf("OSEnv() = %+v, want %+v", got, want)
 	}
 }
+
+func TestSkillFileIsUnderDotAgents(t *testing.T) {
+	env := Env{Home: "/home/u"}
+
+	got, err := SkillFile(env)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "/home/u/.agents/skills/tsundoku/SKILL.md"
+	if got != want {
+		t.Errorf("SkillFile() = %q, want %q", got, want)
+	}
+}
+
+func TestSkillFileIgnoresXDGConfigHome(t *testing.T) {
+	env := Env{XDGConfigHome: "/x", Home: "/home/u"}
+
+	got, err := SkillFile(env)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "/home/u/.agents/skills/tsundoku/SKILL.md"
+	if got != want {
+		t.Errorf("SkillFile() = %q, want %q", got, want)
+	}
+}
+
+func TestSkillFileErrorsWithoutHome(t *testing.T) {
+	_, err := SkillFile(Env{})
+
+	if err == nil {
+		t.Fatalf("SkillFile() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "HOME") {
+		t.Errorf("error = %q, want it to mention HOME", err)
+	}
+}

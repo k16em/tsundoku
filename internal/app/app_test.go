@@ -1233,3 +1233,65 @@ func TestRandomWithANonNumericCountIsRejectedByParse(t *testing.T) {
 		t.Errorf("stderr = %q, want an error: prefix", stderr)
 	}
 }
+
+func TestSkillInstallWritesSkillUnderHome(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	stdout, _ := mustRun(t, dbPath, cfgPath, "skill", "install")
+
+	dest := filepath.Join(home, ".agents", "skills", "tsundoku", "SKILL.md")
+	if !strings.Contains(stdout, dest) {
+		t.Errorf("stdout = %q, want it to report %q", stdout, dest)
+	}
+	content, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", dest, err)
+	}
+	if !strings.Contains(string(content), "name: tsundoku") {
+		t.Errorf("installed skill is missing its frontmatter")
+	}
+}
+
+func TestSkillUninstallRemovesInstalledSkill(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	mustRun(t, dbPath, cfgPath, "skill", "install")
+
+	stdout, _ := mustRun(t, dbPath, cfgPath, "skill", "uninstall")
+
+	dest := filepath.Join(home, ".agents", "skills", "tsundoku", "SKILL.md")
+	if !strings.Contains(stdout, "removed skill") {
+		t.Errorf("stdout = %q, want it to report the removal", stdout)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Errorf("skill file still exists: %v", err)
+	}
+}
+
+func TestSkillUninstallReportsNothingToRemove(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	t.Setenv("HOME", t.TempDir())
+
+	stdout, stderr := mustRun(t, dbPath, cfgPath, "skill", "uninstall")
+
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty", stdout)
+	}
+	if !strings.Contains(stderr, "skill not installed") {
+		t.Errorf("stderr = %q, want a note that nothing was installed", stderr)
+	}
+}
+
+func TestSkillCommandsDoNotCreateTheDatabase(t *testing.T) {
+	dbPath, cfgPath := newPaths(t)
+	t.Setenv("HOME", t.TempDir())
+
+	mustRun(t, dbPath, cfgPath, "skill", "install")
+
+	if _, err := os.Stat(dbPath); !os.IsNotExist(err) {
+		t.Errorf("database was created at %q: %v", dbPath, err)
+	}
+}

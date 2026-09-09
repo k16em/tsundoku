@@ -20,6 +20,8 @@ func TestParseRecognizesEachCommand(t *testing.T) {
 		{"rm", []string{"rm", "1"}, "rm"},
 		{"tag list", []string{"tag", "list"}, "tag list"},
 		{"tag refresh", []string{"tag", "refresh"}, "tag refresh"},
+		{"skill install", []string{"skill", "install"}, "skill install"},
+		{"skill uninstall", []string{"skill", "uninstall"}, "skill uninstall"},
 	}
 
 	for _, tt := range tests {
@@ -761,5 +763,51 @@ func TestParseRandomRejectsBadCounts(t *testing.T) {
 				t.Fatalf("Parse(%v) expected an error", tt.args)
 			}
 		})
+	}
+}
+
+func TestParseRejectsUnknownSkillSubcommand(t *testing.T) {
+	_, err := Parse([]string{"skill", "reinstall"})
+
+	if err == nil {
+		t.Fatalf("Parse() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "unknown skill subcommand") {
+		t.Errorf("error = %q, want it to mention the unknown subcommand", err)
+	}
+}
+
+func TestParseRejectsSkillPositionalArguments(t *testing.T) {
+	_, err := Parse([]string{"skill", "install", "somewhere"})
+
+	if err == nil {
+		t.Fatalf("Parse() error = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "takes no positional arguments") {
+		t.Errorf("error = %q, want it to reject the positional argument", err)
+	}
+}
+
+func TestParseSkillHelpCarriesHelpText(t *testing.T) {
+	p, err := Parse([]string{"skill", "install", "--help"})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !p.Help {
+		t.Errorf("Help = false, want true")
+	}
+	if !strings.Contains(p.HelpText, "tsundoku skill install") {
+		t.Errorf("HelpText = %q, want it to describe skill install", p.HelpText)
+	}
+}
+
+func TestUsageListsSkillCommands(t *testing.T) {
+	usage := Usage()
+
+	for _, want := range []string{"skill install", "skill uninstall"} {
+		if !strings.Contains(usage, want) {
+			t.Errorf("Usage() does not mention %q", want)
+		}
 	}
 }
