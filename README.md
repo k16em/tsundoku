@@ -32,6 +32,8 @@ tsundoku show 1
 | `tsundoku show unread --frozen --json` | 未読を既読にせず JSON 配列で出力 |
 | `tsundoku rm 1 2` | 指定した ID を削除 |
 | `tsundoku tag list` | タグと登録件数を表示 |
+| `tsundoku skill install` | エージェント向けスキルを `~/.agents/skills/tsundoku/SKILL.md` に書き出す |
+| `tsundoku skill uninstall` | 上記スキルファイルを削除する |
 | `tsundoku list --help` | コマンドのオプションを確認 |
 
 登録上限は10,000件、`--limit` は1〜1,000件です。URL は HTTP / HTTPS に対応し、末尾スラッシュやクエリが異なるものは別に登録します。
@@ -44,6 +46,7 @@ tsundoku show 1
 |---|---|---|
 | 設定 | `~/.config/tsundoku/config.toml` | `--config PATH` |
 | データ | `~/.local/share/tsundoku/tsundoku.db` | `--db PATH` |
+| スキル | `~/.agents/skills/tsundoku/SKILL.md` | `skill install` で書き出す |
 
 `XDG_CONFIG_HOME` / `XDG_DATA_HOME` が設定されていれば、それぞれ `~/.config` / `~/.local/share` の代わりに使います。
 

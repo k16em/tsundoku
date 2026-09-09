@@ -61,3 +61,11 @@ func dbFilePath(env Env, override string) (string, error) {
 	}
 	return "", fmt.Errorf("cannot resolve database path: neither XDG_DATA_HOME nor HOME is set")
 }
+
+// SkillFile resolves the install path of the agent skill document.
+func SkillFile(env Env) (string, error) {
+	if env.Home == "" {
+		return "", fmt.Errorf("cannot resolve skill path: HOME is not set")
+	}
+	return filepath.Join(env.Home, ".agents", "skills", "tsundoku", "SKILL.md"), nil
+}

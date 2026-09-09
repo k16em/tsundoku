@@ -16,6 +16,7 @@ import (
 	"github.com/k16em/tsundoku/internal/normalize"
 	"github.com/k16em/tsundoku/internal/output"
 	"github.com/k16em/tsundoku/internal/paths"
+	"github.com/k16em/tsundoku/internal/skill"
 	"github.com/k16em/tsundoku/internal/store"
 )
 
@@ -64,6 +65,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	if parsed.Command == "init" {
 		return runInit(parsed, stdout, stderr, notify)
+	}
+
+	if strings.HasPrefix(parsed.Command, "skill ") {
+		return runSkill(parsed, stdout, stderr, notify)
 	}
 
 	env := paths.OSEnv()
@@ -171,6 +176,39 @@ func runInit(parsed *cli.Parsed, stdout, stderr io.Writer, notify func(string, .
 	if _, err := fmt.Fprintf(stdout, "db:     %s\n", dbPath); err != nil {
 		return reportErr(stderr, err)
 	}
+	return 0
+}
+
+func runSkill(parsed *cli.Parsed, stdout, stderr io.Writer, notify func(string, ...any)) int {
+	dest, err := paths.SkillFile(paths.OSEnv())
+	if err != nil {
+		return reportErr(stderr, err)
+	}
+
+	switch parsed.Command {
+	case "skill install":
+		if err := skill.Install(dest); err != nil {
+			return reportErr(stderr, err)
+		}
+		if _, err := fmt.Fprintf(stdout, "installed skill: %s\n", dest); err != nil {
+			return reportErr(stderr, err)
+		}
+	case "skill uninstall":
+		removed, err := skill.Uninstall(dest)
+		if err != nil {
+			return reportErr(stderr, err)
+		}
+		if !removed {
+			notify("note: skill not installed: %s", dest)
+			return 0
+		}
+		if _, err := fmt.Fprintf(stdout, "removed skill: %s\n", dest); err != nil {
+			return reportErr(stderr, err)
+		}
+	default:
+		return reportErr(stderr, fmt.Errorf("app: unknown command %q", parsed.Command))
+	}
+
 	return 0
 }
 
