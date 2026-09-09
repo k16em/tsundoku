@@ -237,6 +237,27 @@ func (s *Store) Unread(limit int) ([]Bookmark, error) {
 	return s.List(ListFilter{Read: &unread, Sort: "created", Reverse: true, Limit: limit})
 }
 
+// Random returns up to limit unread bookmarks in random order. limit must be positive.
+func (s *Store) Random(limit int) ([]Bookmark, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("random limit must be positive, got %d", limit)
+	}
+
+	rows, err := s.db.Query(
+		"SELECT id, url, read, created_at FROM bookmarks WHERE read = 0 ORDER BY RANDOM() LIMIT ?",
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("select random bookmarks: %w", err)
+	}
+	bookmarks, err := scanBookmarks(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return attachTags(s.db, bookmarks)
+}
+
 // MarkRead sets read = 1 on one bookmark.
 func (s *Store) MarkRead(id int64) error {
 	res, err := s.db.Exec("UPDATE bookmarks SET read = 1 WHERE id = ?", id)
